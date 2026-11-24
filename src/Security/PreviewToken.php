@@ -35,7 +35,8 @@ final class PreviewToken
         if ($secret === '' || $idTemplate <= 0) {
             return false;
         }
-        if (!preg_match('/^(\d{9,11})\.([a-f0-9]{64})$/', $token, $m)) {
+        // \z (not $): "$" would also accept a trailing newline after a valid token.
+        if (!preg_match('/^(\d{9,11})\.([a-f0-9]{64})\z/', $token, $m)) {
             return false;
         }
         $expires = (int) $m[1];
