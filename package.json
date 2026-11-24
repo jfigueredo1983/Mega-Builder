@@ -7,16 +7,21 @@
   "scripts": {
     "typecheck": "vue-tsc --noEmit",
     "build": "vite build && node scripts/postbuild-guards.mjs",
-    "test": "node scripts/run-tests.mjs",
+    "test:ui": "vitest run",
+    "test:php": "node scripts/run-tests.mjs",
+    "test": "vitest run && node scripts/run-tests.mjs",
+    "test:e2e": "playwright test",
     "package": "npm run typecheck && npm run build && node scripts/package-module.mjs"
   },
   "dependencies": {
     "vue": "^3.5.13"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@vitejs/plugin-vue": "^5.2.1",
     "typescript": "^5.7.3",
     "vite": "^6.1.0",
+    "vitest": "^3.2.7",
     "vue-tsc": "^2.2.0"
   }
 }

@@ -1,0 +1,48 @@
+# Disposable PrestaShop store with Mega Builder mounted, for end-to-end tests.
+#
+#   PS_IMAGE=prestashop/prestashop:9.2-apache docker compose -f tests/e2e/docker-compose.yml up -d
+#   (or PS_IMAGE=prestashop/prestashop:8.2-apache for the PrestaShop 8 line)
+#
+# Credentials here are throwaway test values for this local container only.
+name: megabuilder-e2e
+
+services:
+  db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_PASSWD:-mb_test_root}
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  prestashop:
+    image: ${PS_IMAGE:-prestashop/prestashop:9.2-apache}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    environment:
+      DB_SERVER: db
+      DB_NAME: prestashop
+      DB_USER: root
+      DB_PASSWD: ${DB_PASSWD:-mb_test_root}
+      DB_PREFIX: ps_
+      PS_INSTALL_AUTO: "1"
+      # The DB container starts empty every run and the installer creates the database
+      # (PS_INSTALL_DB). Do not also set MARIADB_DATABASE: the create step fails if it exists.
+      PS_INSTALL_DB: "1"
+      PS_DOMAIN: localhost:8080
+      PS_ENABLE_SSL: "0"
+      PS_LANGUAGE: en
+      PS_COUNTRY: US
+      PS_FOLDER_ADMIN: admin-dev
+      PS_FOLDER_INSTALL: install-dev
+      PS_DEV_MODE: "0"
+      ADMIN_MAIL: ${MB_E2E_ADMIN_EMAIL:-admin@megabuilder.test}
+      ADMIN_PASSWD: ${MB_E2E_ADMIN_PASSWORD:-MbE2eTestOnly!2026}
+    volumes:
+      # The repo is the module. Built studio assets (views/dist) are committed, so no build step is needed.
+      - ../..:/var/www/html/modules/megabuilder

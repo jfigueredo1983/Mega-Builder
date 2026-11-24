@@ -150,10 +150,11 @@ final class PayloadValidator
 
         $scopeTargets = [];
         if (isset($payload['scope_targets']) && is_array($payload['scope_targets'])) {
-            foreach ($payload['scope_targets'] as $id) {
-                $cleanId = self::clampInt($id, 1, 99999999, 0);
-                if ($cleanId > 0) {
-                    $scopeTargets[] = $cleanId;
+            foreach (array_slice($payload['scope_targets'], 0, 500) as $id) {
+                // Drop anything that is not a positive whole-number id. Clamping would turn
+                // -1 into 1 and silently target an unrelated product.
+                if ((is_int($id) || (is_string($id) && ctype_digit($id))) && (int) $id > 0 && (int) $id <= 99999999) {
+                    $scopeTargets[] = (int) $id;
                 }
             }
         }
