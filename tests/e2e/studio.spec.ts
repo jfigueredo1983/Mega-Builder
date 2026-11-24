@@ -65,7 +65,18 @@ test.describe.serial('Mega Builder studio → storefront', () => {
 
     const chip = page.locator('.mb-widget-chip').filter({ has: page.locator('span', { hasText: /^Heading$/ }) });
     const column = page.locator('.mb-canvas-column').first();
-    await chip.dragTo(column);
+    await expect(chip).toHaveCount(1);
+    await column.scrollIntoViewIfNeeded();
+
+    // Fire the HTML5 drag events on the exact elements. Mouse-driven dragTo() can scroll the
+    // palette between press and first move, so the browser starts the drag on a neighbouring chip.
+    const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+    await chip.dispatchEvent('dragstart', { dataTransfer });
+    await column.dispatchEvent('dragenter', { dataTransfer });
+    await column.dispatchEvent('dragover', { dataTransfer });
+    await column.dispatchEvent('drop', { dataTransfer });
+    await chip.dispatchEvent('dragend', { dataTransfer });
+    await expect(page.getByText('Added "Heading" to canvas.')).toBeVisible();
 
     const headline = page.locator('.mb-inspector-card').filter({ hasText: 'Main Headline or Text' }).locator('input').first();
     await expect(headline).toHaveValue('Crafted for Modern Living');
