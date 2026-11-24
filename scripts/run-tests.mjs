@@ -81,4 +81,20 @@ assert.ok(fs.existsSync(path.join(ROOT, 'views/dist/studio.css')), 'views/dist/s
 assert.ok(fs.existsSync(path.join(ROOT, 'views/dist/index.php')), 'views/dist/index.php guard must exist');
 console.log('  [PASS] Compiled Vue 3 + TypeScript Studio bundle and index.php guards verified.');
 
-console.log('All Stage 7 Automated Verification Checks PASSED (100%).');
+console.log('All Stage 7 static checks PASSED.');
+
+// 5. Run the real PHP unit tests. They are required: without PHP the suite fails instead of
+//    reporting a pass it never ran. Point MB_PHP_BIN at a php binary if it is not on PATH.
+import { spawnSync } from 'node:child_process';
+
+const phpBin = process.env.MB_PHP_BIN || 'php';
+const php = spawnSync(phpBin, [path.join(ROOT, 'scripts/test-php-core.php')], { stdio: 'inherit' });
+if (php.error) {
+  console.error(`\n[FAIL] PHP unit tests NOT run: could not start '${phpBin}' (${php.error.code}). Install PHP 8.1+ or set MB_PHP_BIN.`);
+  process.exit(1);
+}
+if (php.status !== 0) {
+  console.error('\n[FAIL] PHP unit tests failed.');
+  process.exit(php.status ?? 1);
+}
+console.log('All checks PASSED, including PHP unit tests.');

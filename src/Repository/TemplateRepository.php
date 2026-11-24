@@ -280,30 +280,28 @@ final class TemplateRepository
             $idTemplate = (int) $db->Insert_ID();
         }
 
-        // Save for all installed PrestaShop languages so switching store language works seamlessly
-        $langIds = [$idLang];
+        // Write the language being edited. Other languages keep their own translation;
+        // they only receive a starting copy when they have no row yet (new template or newly installed language).
+        $langValues = static fn(int $lId): string => "("
+            . (int) $idTemplate . ", " . $lId . ", '"
+            . pSQL($d['title']) . "', '"
+            . pSQL($layoutJson, true) . "', '"
+            . pSQL($compiled['html'], true) . "', '"
+            . pSQL($compiled['css'], true) . "')";
+        $cols = "(`id_template`, `id_lang`, `title`, `layout_json`, `compiled_html`, `compiled_css`)";
+
+        $db->execute("REPLACE INTO `{$prefix}mb_template_lang` {$cols} VALUES " . $langValues($idLang));
+
         if (class_exists('Language')) {
             foreach (\Language::getLanguages(false) as $l) {
-                $langIds[] = (int) $l['id_lang'];
+                $lId = (int) $l['id_lang'];
+                if ($lId !== $idLang) {
+                    $db->execute("INSERT IGNORE INTO `{$prefix}mb_template_lang` {$cols} VALUES " . $langValues($lId));
+                }
             }
         }
-        $langIds = array_values(array_unique($langIds));
 
-        foreach ($langIds as $lId) {
-            $db->execute(
-                "REPLACE INTO `{$prefix}mb_template_lang` (`id_template`, `id_lang`, `title`, `layout_json`, `compiled_html`, `compiled_css`)
-                 VALUES (
-                    " . (int) $idTemplate . ",
-                    " . (int) $lId . ",
-                    '" . pSQL($d['title']) . "',
-                    '" . pSQL($layoutJson, true) . "',
-                    '" . pSQL($compiled['html'], true) . "',
-                    '" . pSQL($compiled['css'], true) . "'
-                 )"
-            );
-        }
-
-        // Save Multistore mapping
+        // Multistore mapping: the template belongs to the shop it was saved in.
         $db->execute(
             "REPLACE INTO `{$prefix}mb_template_shop` (`id_template`, `id_shop`, `active`)
              VALUES (" . (int) $idTemplate . ", " . (int) $idShop . ", " . (int) $d['active'] . ")"
@@ -456,28 +454,21 @@ final class TemplateRepository
     }
 
     /**
-     * Render a live preview or active storefront section with resolved Dynamic Tags and embedded Sub-Studios.
+     * Page sections that render on every page (as long as their hook fires).
+     * Every other section only renders on its own page type.
+     */
+    public const GLOBAL_SECTIONS = ['header', 'footer', 'custom'];
+
+    /**
+     * Render a layout with resolved Dynamic Tags and embedded Sub-Studio templates.
      *
      * @param array<string, mixed> $layout
      * @return array{html: string, css: string}
      */
-    public static function renderLiveLayout(array $layout): array
+    public static function renderLiveLayout(array $layout, int $idLang = 1): array
     {
         $compiled = LayoutCompiler::compile($layout, self::getGlobalSettings());
-        $resolvedHtml = DynamicTagResolver::resolve(
-            $compiled['html'],
-            [],
-            static function (int $subId): ?array {
-                $sub = self::getTemplate($subId);
-                if (!$sub) {
-                    return null;
-                }
-                return [
-                    'html' => (string) $sub['compiled_html'],
-                    'css'  => (string) $sub['compiled_css'],
-                ];
-            }
-        );
+        $resolvedHtml = DynamicTagResolver::resolve($compiled['html'], [], self::subTemplateLoader($idLang));
 
         return [
             'html' => $resolvedHtml,
@@ -486,43 +477,76 @@ final class TemplateRepository
     }
 
     /**
-     * Fetch and resolve all active templates matching a given storefront section_type or hook_name.
-     *
-     * @return array{html: string, css: string}
+     * Loader for [mb_template id="..."] embeds, in the visitor's language.
      */
-    public static function renderActiveForHookOrSection(string $hookName, ?string $sectionType = null, int $idLang = 1): array
+    private static function subTemplateLoader(int $idLang): callable
     {
-        if (!class_exists('Db')) {
-            return ['html' => '', 'css' => ''];
-        }
-        $prefix = defined('_DB_PREFIX_') ? _DB_PREFIX_ : 'ps_';
-        $cond = "t.active = 1 AND t.entity_kind = 'page_template'";
-        if ($sectionType !== null && $sectionType !== '') {
-            $cond .= " AND (t.section_type = '" . pSQL($sectionType) . "' OR t.hook_name = '" . pSQL($hookName) . "')";
-        } else {
-            $cond .= " AND t.hook_name = '" . pSQL($hookName) . "'";
-        }
-
-        $rows = \Db::getInstance()->executeS(
-            "SELECT t.id_template, tl.compiled_html, tl.compiled_css
-             FROM `{$prefix}mb_template` t
-             INNER JOIN `{$prefix}mb_template_lang` tl ON (t.id_template = tl.id_template AND tl.id_lang = " . (int) $idLang . ")
-             WHERE {$cond}
-             ORDER BY t.priority ASC, t.id_template DESC"
-        );
-
-        if (!is_array($rows) || count($rows) === 0) {
-            return ['html' => '', 'css' => ''];
-        }
-
-        $htmlBlocks = [];
-        $cssBlocks = [];
-        $loader = static function (int $subId) use ($idLang): ?array {
+        return static function (int $subId) use ($idLang): ?array {
             $sub = self::getTemplate($subId, $idLang);
             return $sub ? ['html' => (string) $sub['compiled_html'], 'css' => (string) $sub['compiled_css']] : null;
         };
+    }
+
+    /**
+     * Decide whether a template applies to the current page.
+     *
+     * @param array{section: ?string, entity_id: int} $page
+     * @param array<int, int> $targets
+     */
+    public static function appliesToPage(string $sectionType, string $scopeRule, array $targets, array $page): bool
+    {
+        if (!in_array($sectionType, self::GLOBAL_SECTIONS, true) && $sectionType !== ($page['section'] ?? null)) {
+            return false;
+        }
+        if ($scopeRule === 'specific_ids') {
+            $entityId = (int) ($page['entity_id'] ?? 0);
+            return $entityId > 0 && in_array($entityId, array_map('intval', $targets), true);
+        }
+        // 'all' — and 'conditions', which has no rule editor yet, so it behaves like 'all'.
+        return true;
+    }
+
+    /**
+     * Render all published page templates attached to this hook that apply to the current page and shop.
+     *
+     * @param array{section: ?string, entity_id: int} $page
+     * @return array{html: string, css: string}
+     */
+    public static function renderActiveForHook(string $hookName, array $page, int $idLang = 1, int $idShop = 1): array
+    {
+        $empty = ['html' => '', 'css' => ''];
+        if (!class_exists('Db')) {
+            return $empty;
+        }
+        $prefix = defined('_DB_PREFIX_') ? _DB_PREFIX_ : 'ps_';
+
+        $rows = \Db::getInstance()->executeS(
+            "SELECT t.id_template, t.section_type, t.scope_rule, t.scope_targets, tl.compiled_html, tl.compiled_css
+             FROM `{$prefix}mb_template` t
+             INNER JOIN `{$prefix}mb_template_shop` ts ON (ts.id_template = t.id_template AND ts.id_shop = " . (int) $idShop . " AND ts.active = 1)
+             INNER JOIN `{$prefix}mb_template_lang` tl ON (tl.id_template = t.id_template AND tl.id_lang = " . (int) $idLang . ")
+             WHERE t.entity_kind = 'page_template'
+               AND t.hook_name = '" . pSQL($hookName) . "'
+             ORDER BY t.priority ASC, t.id_template DESC"
+        );
+        if (!is_array($rows) || count($rows) === 0) {
+            return $empty;
+        }
+
+        $pageRules = self::getGlobalSettings()['page_rules'] ?? [];
+        $loader = self::subTemplateLoader($idLang);
+        $htmlBlocks = [];
+        $cssBlocks = [];
 
         foreach ($rows as $r) {
+            $section = (string) $r['section_type'];
+            if (isset($pageRules[$section]) && empty($pageRules[$section]['enabled'])) {
+                continue;
+            }
+            $targets = json_decode((string) ($r['scope_targets'] ?? '[]'), true);
+            if (!self::appliesToPage($section, (string) $r['scope_rule'], is_array($targets) ? $targets : [], $page)) {
+                continue;
+            }
             $htmlBlocks[] = DynamicTagResolver::resolve((string) ($r['compiled_html'] ?? ''), [], $loader);
             if (!empty($r['compiled_css'])) {
                 $cssBlocks[] = (string) $r['compiled_css'];

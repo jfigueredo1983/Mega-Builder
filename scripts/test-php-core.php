@@ -14,6 +14,9 @@ use MegaBuilder\Compiler\LayoutCompiler;
 use MegaBuilder\Compiler\WidgetRegistry;
 use MegaBuilder\Security\CssSanitizer;
 use MegaBuilder\Security\HtmlSanitizer;
+use MegaBuilder\Security\PreviewToken;
+use MegaBuilder\Repository\TemplateRepository;
+use MegaBuilder\Service\MediaManagerService;
 use MegaBuilder\Security\SvgSanitizer;
 use MegaBuilder\Validator\PayloadValidator;
 
@@ -87,5 +90,51 @@ foreach ($blueprints as $key => $bp) {
     assertTrue(!str_contains($resolved, '{{mb:'), "Unresolved {{mb:...}} dynamic tag leaked in {$key}");
 }
 echo "  [PASS] All 19 Starter Blueprints compiled across 3 viewports with 0 unresolved dynamic tags.\n";
+
+// 6. Signed preview tokens: bound to one template, expire, reject tampering, fail closed without a secret
+$secret = 'test-secret-value';
+$now = 1_800_000_000;
+$tok = PreviewToken::create(5, $secret, 900, $now);
+assertTrue(PreviewToken::verify(5, $tok, $secret, $now + 10), 'Valid preview token rejected');
+assertTrue(!PreviewToken::verify(6, $tok, $secret, $now + 10), 'Preview token accepted for a different template');
+assertTrue(!PreviewToken::verify(5, $tok, $secret, $now + 901), 'Expired preview token accepted');
+assertTrue(!PreviewToken::verify(5, $tok, 'other-secret', $now + 10), 'Preview token accepted with wrong secret');
+assertTrue(!PreviewToken::verify(5, '', $secret, $now), 'Empty preview token accepted');
+assertTrue(!PreviewToken::verify(5, substr($tok, 0, -1) . (substr($tok, -1) === 'a' ? 'b' : 'a'), $secret, $now + 10), 'Tampered preview token accepted');
+assertTrue(PreviewToken::create(5, '', 900, $now) === '', 'Token created without a secret');
+assertTrue(!PreviewToken::verify(5, $tok, '', $now + 10), 'Token verified without a secret');
+echo "  [PASS] Signed, expiring, template-bound preview tokens verified.\n";
+
+// 7. URL sanitizer blocks off-site and script schemes
+assertTrue(HtmlSanitizer::sanitizeUrl('//evil.example/x') === '#', 'Protocol-relative URL allowed');
+assertTrue(HtmlSanitizer::sanitizeUrl('/\\evil.example') === '#', 'Backslash host trick allowed');
+assertTrue(HtmlSanitizer::sanitizeUrl(' JaVaScRiPt:alert(1)') === '#', 'javascript: URL allowed');
+assertTrue(HtmlSanitizer::sanitizeUrl('data:text/html,x') === '#', 'data: URL allowed');
+assertTrue(HtmlSanitizer::sanitizeUrl('ftp://x.example') === '#', 'Unlisted scheme allowed');
+assertTrue(HtmlSanitizer::sanitizeUrl('/2-home') === '/2-home', 'Same-site path rejected');
+assertTrue(HtmlSanitizer::sanitizeUrl('https://shop.example/a?b=1') === 'https://shop.example/a?b=1', 'https URL rejected');
+assertTrue(HtmlSanitizer::sanitizeUrl('{{mb:product_url}}') === '{{mb:product_url}}', 'Dynamic tag URL rejected');
+assertTrue(HtmlSanitizer::sanitizeUrl('mailto:hi@example.com') === 'mailto:hi@example.com', 'mailto rejected');
+echo "  [PASS] URL sanitizer scheme and off-site checks verified.\n";
+
+// 8. Page targeting: page-specific sections only render on their page; specific IDs match the viewed entity
+$productPage = ['section' => 'product', 'entity_id' => 42];
+$homePage = ['section' => 'homepage', 'entity_id' => 0];
+assertTrue(TemplateRepository::appliesToPage('product', 'all', [], $productPage), 'Product template hidden on product page');
+assertTrue(!TemplateRepository::appliesToPage('product', 'all', [], $homePage), 'Product template shown on homepage');
+assertTrue(TemplateRepository::appliesToPage('header', 'all', [], $productPage), 'Global header hidden on product page');
+assertTrue(TemplateRepository::appliesToPage('product', 'specific_ids', [42, 7], $productPage), 'Targeted product not matched');
+assertTrue(!TemplateRepository::appliesToPage('product', 'specific_ids', [7], $productPage), 'Untargeted product matched');
+assertTrue(!TemplateRepository::appliesToPage('homepage', 'specific_ids', [1], $homePage), 'specific_ids matched a page with no entity id');
+echo "  [PASS] Page section and specific-ID targeting verified.\n";
+
+// 9. Media uploads: bytes must match the extension
+$png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', true);
+assertTrue(MediaManagerService::bytesMatchExtension((string) $png, 'png'), 'Real PNG rejected');
+assertTrue(!MediaManagerService::bytesMatchExtension((string) $png, 'jpg'), 'PNG accepted as .jpg');
+assertTrue(!MediaManagerService::bytesMatchExtension('<?php echo 1; ?>', 'png'), 'PHP code accepted as .png');
+assertTrue(!MediaManagerService::deleteMedia('../../../megabuilder.php'), 'deleteMedia escaped the uploads folder');
+assertTrue(!MediaManagerService::deleteMedia('index.php'), 'deleteMedia removed the index guard');
+echo "  [PASS] Media content checks and delete path confinement verified.\n";
 
 echo "All PHP Core & Security Unit Tests PASSED (100%).\n";

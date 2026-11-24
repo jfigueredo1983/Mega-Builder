@@ -123,24 +123,24 @@ final class HtmlSanitizer
             return '#';
         }
 
-        // Allow dynamic store tags e.g. {{mb:product_url}}
+        $normalized = strtolower((string) preg_replace('/[\s\x00-\x20]+/', '', html_entity_decode($str, ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+
+        // Protocol-relative ("//host") and backslash tricks ("/\host") point off-site; reject them.
+        if (str_starts_with($normalized, '//') || str_starts_with($normalized, '/\\') || str_starts_with($normalized, '\\')) {
+            return '#';
+        }
+
+        // Dynamic store tags (e.g. {{mb:product_url}}), in-page anchors and same-site paths.
         if (str_starts_with($str, '{{mb:') || str_starts_with($str, '#') || str_starts_with($str, '/')) {
             return $str;
         }
 
-        $normalized = strtolower((string) preg_replace('/[\s\x00-\x20]+/', '', html_entity_decode($str, ENT_QUOTES | ENT_HTML5, 'UTF-8')));
-        if (
-            str_starts_with($normalized, 'javascript:') ||
-            str_starts_with($normalized, 'vbscript:') ||
-            str_starts_with($normalized, 'data:')
-        ) {
-            return '#';
+        // Anything with a scheme must use an allowed one.
+        if (preg_match('#^([a-z][a-z0-9+.-]*):#', $normalized, $m)) {
+            return in_array($m[1], ['http', 'https', 'mailto', 'tel'], true) ? $str : '#';
         }
 
-        if (preg_match('#^(https?://|mailto:|tel:)#i', $str)) {
-            return $str;
-        }
-
+        // Relative path such as "page.html" or "?q=1".
         return $str;
     }
 }

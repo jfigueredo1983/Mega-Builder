@@ -183,32 +183,91 @@ class MegaBuilder extends Module
             'mb_section' => $targetSection,
         ]);
 
-        $safeUrl = HtmlSanitizer::escapeOutput($studioUrl);
-        $safeSec = HtmlSanitizer::escapeOutput(ucfirst($targetSection));
+        // These values go into a <script> block, so encode them as JS string literals.
+        // HTML-escaping here would turn "&token=" into "&amp;token=" and break the admin token.
+        $jsFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE;
+        $jsUrl = json_encode($studioUrl, $jsFlags);
+        $jsLabel = json_encode('✏️ Edit ' . ucfirst($targetSection) . ' Layout with Mega Builder', $jsFlags);
 
         return <<<HTML
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+  if (document.getElementById('mb-direct-launch-btn')) return;
   var toolbar = document.querySelector('.page-head .toolbarBox, .header-toolbar, .content-div .page-bar');
-  if (!toolbar || document.getElementById('mb-direct-launch-btn')) return;
   var btn = document.createElement('a');
   btn.id = 'mb-direct-launch-btn';
-  btn.href = '{$safeUrl}';
-  btn.textContent = '✏️ Edit {$safeSec} Layout with Mega Builder';
+  btn.href = {$jsUrl};
+  btn.textContent = {$jsLabel};
   btn.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:8px 14px;margin:6px 12px;background:#2563eb;color:#fff;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;box-shadow:0 2px 6px rgba(37,99,235,0.25);';
-  toolbar.prepend(btn);
+  if (toolbar) {
+    toolbar.prepend(btn);
+  } else {
+    // PrestaShop 9 product/category edit pages have no toolbar: float the button bottom-right instead.
+    btn.style.position = 'fixed';
+    btn.style.right = '16px';
+    btn.style.bottom = '16px';
+    btn.style.zIndex = '1050';
+    document.body.appendChild(btn);
+  }
 });
 </script>
 HTML;
     }
 
+    /** @var array{section: ?string, entity_id: int}|null */
+    private ?array $pageContext = null;
+
     /**
-     * Map native PrestaShop storefront controllers and hooks to our 15 Page Sections.
+     * Work out which of the 15 page sections the current storefront request is, plus the
+     * product / category / CMS / brand id used by "specific IDs" targeting.
+     *
+     * @return array{section: ?string, entity_id: int}
      */
-    private function renderHookOutput(string $hookName, ?string $sectionType = null): string
+    private function getPageContext(): array
+    {
+        if ($this->pageContext !== null) {
+            return $this->pageContext;
+        }
+        $phpSelf = (string) ($this->context->controller->php_self ?? '');
+        $map = [
+            'index'              => ['homepage', ''],
+            'product'            => ['product', 'id_product'],
+            'category'           => ['category', 'id_category'],
+            'cms'                => ['cms', 'id_cms'],
+            'my-account'         => ['account', ''],
+            'identity'           => ['account', ''],
+            'addresses'          => ['account', ''],
+            'address'            => ['account', ''],
+            'history'            => ['account', ''],
+            'order-detail'       => ['account', ''],
+            'order-slip'         => ['account', ''],
+            'discount'           => ['account', ''],
+            'guest-tracking'     => ['account', ''],
+            'prices-drop'        => ['prices_drop', ''],
+            'new-products'       => ['new_products', ''],
+            'best-sales'         => ['best_sales', ''],
+            'search'             => ['search', ''],
+            'cart'               => ['checkout', ''],
+            'order'              => ['checkout', ''],
+            'order-confirmation' => ['checkout', ''],
+            'manufacturer'       => ['manufacturers', 'id_manufacturer'],
+            'supplier'           => ['manufacturers', 'id_supplier'],
+            'pagenotfound'       => ['page_404', ''],
+        ];
+        [$section, $idParam] = $map[$phpSelf] ?? [null, ''];
+        $entityId = $idParam !== '' ? (int) \Tools::getValue($idParam, 0) : 0;
+
+        return $this->pageContext = ['section' => $section, 'entity_id' => $entityId];
+    }
+
+    /**
+     * Render every published template attached to this hook that applies to the current page.
+     */
+    private function renderHookOutput(string $hookName): string
     {
         $idLang = (int) ($this->context->language->id ?? 1);
-        $rendered = TemplateRepository::renderActiveForHookOrSection($hookName, $sectionType, $idLang);
+        $idShop = (int) ($this->context->shop->id ?? 1);
+        $rendered = TemplateRepository::renderActiveForHook($hookName, $this->getPageContext(), $idLang, $idShop);
         if ($rendered['html'] === '') {
             return '';
         }
@@ -229,7 +288,7 @@ HTML;
 
     public function hookDisplayNavFullWidth(): string
     {
-        return $this->renderHookOutput('displayNavFullWidth', 'header');
+        return $this->renderHookOutput('displayNavFullWidth');
     }
 
     public function hookDisplayTop(): string
@@ -239,12 +298,12 @@ HTML;
 
     public function hookDisplayHome(): string
     {
-        return $this->renderHookOutput('displayHome', 'homepage');
+        return $this->renderHookOutput('displayHome');
     }
 
     public function hookDisplayFooterProduct(): string
     {
-        return $this->renderHookOutput('displayFooterProduct', 'product');
+        return $this->renderHookOutput('displayFooterProduct');
     }
 
     public function hookDisplayProductAdditionalInfo(): string
@@ -254,7 +313,7 @@ HTML;
 
     public function hookDisplayCategoryHeader(): string
     {
-        return $this->renderHookOutput('displayCategoryHeader', 'category');
+        return $this->renderHookOutput('displayCategoryHeader');
     }
 
     public function hookDisplayLeftColumn(): string
@@ -269,39 +328,27 @@ HTML;
 
     public function hookDisplayFooter(): string
     {
-        return $this->renderHookOutput('displayFooter', 'footer');
+        return $this->renderHookOutput('displayFooter');
     }
 
     public function hookDisplayCustomerAccount(): string
     {
-        return $this->renderHookOutput('displayCustomerAccount', 'account');
+        return $this->renderHookOutput('displayCustomerAccount');
     }
 
     public function hookDisplayShoppingCartFooter(): string
     {
-        return $this->renderHookOutput('displayShoppingCartFooter', 'checkout');
+        return $this->renderHookOutput('displayShoppingCartFooter');
     }
 
     public function hookDisplayCMSDisputeInformation(): string
     {
-        return $this->renderHookOutput('displayCMSDisputeInformation', 'cms');
+        return $this->renderHookOutput('displayCMSDisputeInformation');
     }
 
     public function hookDisplayWrapperTop(): string
     {
-        $phpSelf = (string) ($this->context->controller->php_self ?? '');
-        $controllerMap = [
-            'prices-drop'  => 'prices_drop',
-            'new-products' => 'new_products',
-            'best-sales'   => 'best_sales',
-            'search'       => 'search',
-            'manufacturer' => 'manufacturers',
-            'supplier'     => 'manufacturers',
-            'pagenotfound' => 'page_404',
-            '404'          => 'page_404',
-        ];
-        $sec = $controllerMap[$phpSelf] ?? null;
-        return $this->renderHookOutput('displayWrapperTop', $sec);
+        return $this->renderHookOutput('displayWrapperTop');
     }
 
     public function hookDisplayWrapperBottom(): string
