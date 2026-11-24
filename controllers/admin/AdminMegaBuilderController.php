@@ -9,6 +9,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__, 2) . '/src/Autoloader.php';
 \MegaBuilder\Autoloader::register();
 
+use MegaBuilder\Compiler\MegaMenuRenderer;
 use MegaBuilder\Compiler\WidgetRegistry;
 use MegaBuilder\Repository\TemplateRepository;
 use MegaBuilder\Security\HtmlSanitizer;
@@ -101,7 +102,7 @@ class AdminMegaBuilderController extends ModuleAdminController
         $previewBaseUrl = $this->context->link->getModuleLink('megabuilder', 'preview');
 
         $bootPayload = [
-            'version'         => (string) ($this->module->version ?? '1.1.0'),
+            'version'         => (string) ($this->module->version ?? '1.2.0'),
             'psVersion'       => defined('_PS_VERSION_') ? _PS_VERSION_ : '9.2.0',
             'shopName'        => (string) ($this->context->shop->name ?? 'DoIt Furniture'),
             'storefrontUrl'   => $this->context->shop->getBaseURL(true),
@@ -121,6 +122,7 @@ class AdminMegaBuilderController extends ModuleAdminController
             'globalSettings'  => TemplateRepository::getGlobalSettings(),
             'studioTheme'     => TemplateRepository::getStudioTheme(),
             'media'           => MediaManagerService::listMedia(),
+            'categoryMenu'    => MegaMenuRenderer::loadCategoryItems($idLang, $idShop, MegaMenuRenderer::MAX_ITEMS),
         ];
 
         $modulePath = _MODULE_DIR_ . 'megabuilder/';

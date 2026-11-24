@@ -42,6 +42,9 @@ final class LayoutCompiler
         'spacer',
     ];
 
+    /** Tablet breakpoint of the layout being compiled; menus collapse into a drawer below it. */
+    private static int $collapseBelowPx = 1024;
+
     public static function isRendered(string $type): bool
     {
         return in_array($type, self::RENDERED_TYPES, true);
@@ -60,6 +63,7 @@ final class LayoutCompiler
         $global = PayloadValidator::validateGlobalSettings($globalSettings);
 
         $tabletBp = (int) ($global['layout']['tablet_breakpoint_px'] ?? 1024);
+        self::$collapseBelowPx = $tabletBp;
         $mobileBp = (int) ($global['layout']['mobile_breakpoint_px'] ?? 767);
         $touchMin = (int) ($global['components']['touch_min_px'] ?? 44);
 
@@ -102,7 +106,7 @@ final class LayoutCompiler
             $bgColor = CssSanitizer::sanitizeColor($sec['bg_color'] ?? 'transparent', 'transparent');
             $maxWidth = ($sec['layout_mode'] ?? 'boxed') === 'full_width' ? '100%' : ((int) ($sec['max_width'] ?? 1280)) . 'px';
 
-            $desktopCss[] = ".mb-sec-{$secId} { background-color: {$bgColor}; padding: {$pyD}px {$pxD}px; box-sizing: border-box; width: 100%; max-width: 100%; overflow-x: hidden; }";
+            $desktopCss[] = ".mb-sec-{$secId} { background-color: {$bgColor}; padding: {$pyD}px {$pxD}px; box-sizing: border-box; width: 100%; max-width: 100%; overflow-x: hidden; overflow-x: clip; }";
             $desktopCss[] = ".mb-sec-{$secId} > .mb-section-inner { max-width: {$maxWidth}; margin: 0 auto; display: flex; flex-wrap: wrap; gap: {$gapD}px; width: 100%; box-sizing: border-box; }";
 
             $tabletCss[] = ".mb-sec-{$secId} { padding: {$pyT}px {$pxT}px; }";
@@ -211,6 +215,7 @@ final class LayoutCompiler
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
+  overflow-x: clip; /* clip, unlike hidden, does not also clip vertically, so menu panels can drop down */
 }
 .mb-storefront-root *, .mb-storefront-root *::before, .mb-storefront-root *::after {
   box-sizing: border-box;
@@ -296,7 +301,7 @@ CSS;
         $cssT = ".mb-w-{$wId} { padding: {$pyT}px {$pxT}px; text-align: {$alignT}; font-size: {$fsT}px; --mb-w-cols: {$colsT}; }";
         $cssM = ".mb-w-{$wId} { padding: {$pyM}px {$pxM}px; text-align: {$alignM}; font-size: {$fsM}px; --mb-w-cols: {$colsM}; }";
 
-        $innerHtml = self::renderWidgetInnerHtml($type, $c, $w['label'] ?? $type);
+        $innerHtml = self::renderWidgetInnerHtml($type, $c, $w['label'] ?? $type, (string) $w['id']);
 
         $html = '<div class="' . implode(' ', $classes) . '" data-mb-widget-id="' . $wId . '" data-mb-widget-type="' . HtmlSanitizer::escapeOutput($type) . '">'
             . $innerHtml
@@ -315,7 +320,7 @@ CSS;
      *
      * @param array<string, mixed> $c
      */
-    private static function renderWidgetInnerHtml(string $type, array $c, string $fallbackLabel): string
+    private static function renderWidgetInnerHtml(string $type, array $c, string $fallbackLabel, string $widgetId = ''): string
     {
         $e = static fn(mixed $v, string $def = ''): string => HtmlSanitizer::escapeOutput(is_scalar($v) && (string) $v !== '' ? (string) $v : $def);
 
@@ -415,25 +420,14 @@ CSS;
                 return '<div class="mb-accordion-group" data-mb-component="accordion">' . implode('', $rows) . '</div>';
 
             case 'nav_megamenu':
-                $items = is_array($c['items'] ?? null) && count($c['items']) > 0 ? $c['items'] : [
-                    ['title' => 'Living Room', 'url' => '/2-home', 'answer' => 'Sectionals • Sofas • Coffee Tables'],
-                    ['title' => 'Dining Room', 'url' => '/2-home', 'answer' => 'Oak Tables • Chairs • Sideboards'],
-                    ['title' => 'Bedroom',     'url' => '/2-home', 'answer' => 'Beds • Nightstands • Dressers'],
-                ];
-                $links = [];
-                foreach ($items as $item) {
-                    if (!is_array($item)) {
-                        continue;
-                    }
-                    $t = $e($item['title'] ?? 'Department');
-                    $u = HtmlSanitizer::sanitizeUrl($item['url'] ?? '/');
-                    $sub = $e($item['answer'] ?? '');
-                    $links[] = '<div class="mb-megamenu-col">'
-                        . '<a href="' . HtmlSanitizer::escapeOutput($u) . '" class="mb-megamenu-link mb-interactive-hit">' . $t . '</a>'
-                        . ($sub !== '' ? '<span class="mb-megamenu-sub">' . $sub . '</span>' : '')
-                        . '</div>';
+                $navId = 'mbmm-' . (string) preg_replace('/[^a-zA-Z0-9_-]/', '', $widgetId);
+                $label = is_scalar($c['menu_label'] ?? null) && trim((string) $c['menu_label']) !== '' ? trim((string) $c['menu_label']) : 'Menu';
+                if (($c['source'] ?? 'manual') === 'categories') {
+                    // Store categories change without a template save: resolved per request by DynamicTagResolver.
+                    $max = PayloadValidator::clampInt($c['max_items'] ?? 8, 1, MegaMenuRenderer::MAX_ITEMS, 8);
+                    return '[mb_category_menu id="' . $navId . '" max="' . $max . '" collapse="' . self::$collapseBelowPx . '" label="' . base64_encode($label) . '"]';
                 }
-                return '<nav class="mb-megamenu-nav" aria-label="Main Storefront Departments">' . implode('', $links) . '</nav>';
+                return MegaMenuRenderer::render(MegaMenuRenderer::normalizeItems($c['items'] ?? []), $navId, $label, self::$collapseBelowPx);
 
             case 'product_grid':
             case 'product_carousel':

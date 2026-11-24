@@ -45,7 +45,7 @@ class MegaBuilder extends Module
     {
         $this->name = 'megabuilder';
         $this->tab = 'front_office_features';
-        $this->version = '1.1.0';
+        $this->version = '1.2.0';
         $this->author = 'Mega Builder Studio';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -141,15 +141,19 @@ class MegaBuilder extends Module
     public function hookActionFrontControllerSetMedia(): void
     {
         if (isset($this->context->controller) && method_exists($this->context->controller, 'registerStylesheet')) {
+            // Versioned URLs so browsers fetch the new CSS/JS after a module upgrade
+            // (PrestaShop's local asset paths cannot carry a query string, hence 'remote').
+            $base = $this->_path . 'views/';
+            $ver = '?v=' . rawurlencode($this->version);
             $this->context->controller->registerStylesheet(
                 'module-megabuilder-storefront',
-                'modules/' . $this->name . '/views/css/storefront.css',
-                ['media' => 'all', 'priority' => 150]
+                $base . 'css/storefront.css' . $ver,
+                ['media' => 'all', 'priority' => 150, 'server' => 'remote']
             );
             $this->context->controller->registerJavascript(
                 'module-megabuilder-storefront-js',
-                'modules/' . $this->name . '/views/js/storefront.js',
-                ['position' => 'bottom', 'priority' => 150]
+                $base . 'js/storefront.js' . $ver,
+                ['position' => 'bottom', 'priority' => 150, 'server' => 'remote']
             );
         }
     }

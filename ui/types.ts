@@ -220,6 +220,8 @@ export interface BootPayload {
   globalSettings: GlobalSettings;
   studioTheme: StudioTheme;
   media: { folders: string[]; files: MediaAsset[] };
+  /** The store's category tree in MegaMenu shape, for previewing "store categories" menus. */
+  categoryMenu?: import('./megamenu').MenuItem[];
 }
 
 export interface ApiEnvelope<T = Record<string, any>> {
