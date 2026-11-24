@@ -32,7 +32,9 @@ services:
       DB_PASSWD: ${DB_PASSWD:-mb_test_root}
       DB_PREFIX: ps_
       PS_INSTALL_AUTO: "1"
-      PS_ERASE_DB: "1"
+      # Fresh DB container every run (MARIADB_DATABASE). PS_ERASE_DB would drop it and the
+      # installer does not recreate it, so only ask the installer to create it if missing.
+      PS_INSTALL_DB: "1"
       PS_DOMAIN: localhost:8080
       PS_ENABLE_SSL: "0"
       PS_LANGUAGE: en
