@@ -65,7 +65,25 @@ final class DynamicTagResolver
             );
         }
 
-        // 4. Resolve [mb_module name="..." hook="..."] native PrestaShop third-party module embeds
+        // 4. Resolve [mb_category_menu ...] MegaMenus built from the live store category tree.
+        if (str_contains($compiledHtml, '[mb_category_menu')) {
+            $compiledHtml = (string) preg_replace_callback(
+                '/\[mb_category_menu id="([a-zA-Z0-9_-]+)" max="(\d+)" collapse="(\d+)" label="([A-Za-z0-9+\/=]*)"\]/',
+                static function (array $m): string {
+                    $ctx = class_exists('Context') ? \Context::getContext() : null;
+                    $items = MegaMenuRenderer::loadCategoryItems(
+                        (int) ($ctx->language->id ?? 1),
+                        (int) ($ctx->shop->id ?? 1),
+                        (int) $m[2]
+                    );
+                    $label = (string) base64_decode($m[4], true);
+                    return MegaMenuRenderer::render($items, $m[1], $label !== '' ? $label : 'Menu', (int) $m[3]);
+                },
+                $compiledHtml
+            );
+        }
+
+        // 5. Resolve [mb_module name="..." hook="..."] native PrestaShop third-party module embeds
         if (str_contains($compiledHtml, '[mb_module')) {
             $compiledHtml = (string) preg_replace_callback(
                 '/\[mb_module\s+name=["\']([a-zA-Z0-9_-]+)["\'](?:\s+hook=["\']([a-zA-Z0-9_-]+)["\'])?\s*\]/i',

@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import type { BootPayload, WidgetNode } from './types';
 import { createStudioStore } from './useStudioStore';
 import CanvasWidgetPreview from './CanvasWidgetPreview.vue';
+import MegaMenuEditor from './MegaMenuEditor.vue';
 
 const props = defineProps<{ boot: BootPayload }>();
 const store = createStudioStore(props.boot);
@@ -1274,6 +1275,7 @@ function countTemplatesForSection(secKey: string): number {
                     <CanvasWidgetPreview
                       :widget="w"
                       :viewport="state.viewport"
+                      :category-menu="state.boot.categoryMenu"
                     />
                   </div>
 
@@ -1598,9 +1600,17 @@ function countTemplatesForSection(secKey: string): number {
                 </select>
               </div>
 
-              <!-- Items Repeater (Sliders, Accordions, MegaMenus, Hotspots) -->
+              <!-- MegaMenu: dedicated editor (source, items, columns, promo) -->
+              <MegaMenuEditor
+                v-if="selectedWidget.type === 'nav_megamenu'"
+                :widget="selectedWidget"
+                :category-count="(state.boot.categoryMenu || []).length"
+                @before-change="store.pushUndoSnapshot()"
+              />
+
+              <!-- Items Repeater (Sliders, Accordions, Hotspots) -->
               <div
-                v-if="Array.isArray(selectedWidget.content.items)"
+                v-else-if="Array.isArray(selectedWidget.content.items)"
                 class="mb-inspector-card"
               >
                 <div class="mb-field-label">

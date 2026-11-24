@@ -124,12 +124,15 @@ final class WidgetRegistry
             // =====================================================================
             ['type' => 'shop_logo',       'category' => 'site', 'label' => 'Shop Brand Logo',          'icon' => 'home',          'defaults' => ['text' => '{{mb:shop_name}}', 'tagline' => 'FINE ARCHITECTURAL FURNITURE']],
             ['type' => 'shop_title',      'category' => 'site', 'label' => 'Dynamic Shop Title',       'icon' => 'bookmark',      'defaults' => ['text' => '{{mb:shop_name}}']],
-            ['type' => 'nav_megamenu',    'category' => 'site', 'label' => 'Nav Menu / MegaMenu',      'icon' => 'menu',          'defaults' => ['promo_badge' => 'NEW SEASON', 'promo_title' => '30% Off Modular Sofas', 'items' => [
-                ['title' => 'Living Room',  'url' => '/2-home', 'answer' => 'Sectionals • Sofas • Lounge Chairs • Coffee Tables'],
-                ['title' => 'Dining & Bar', 'url' => '/2-home', 'answer' => 'Extendable Tables • Dining Chairs • Sideboards • Bar Stools'],
-                ['title' => 'Bedroom',      'url' => '/2-home', 'answer' => 'Upholstered Beds • Nightstands • Dressers • Mattresses'],
-                ['title' => 'Home Office',  'url' => '/2-home', 'answer' => 'Executive Desks • Ergonomic Chairs • Bookcases'],
-                ['title' => 'Outdoor',      'url' => '/2-home', 'answer' => 'Teak Loungers • Patio Dining • All-Weather Sectionals'],
+            ['type' => 'nav_megamenu',    'category' => 'site', 'label' => 'Nav Menu / MegaMenu',      'icon' => 'menu',          'defaults' => ['source' => 'categories', 'max_items' => 8, 'menu_label' => 'Menu', 'items' => [
+                ['title' => 'Living Room', 'url' => '#', 'badge' => 'NEW', 'columns' => [
+                    ['heading' => 'Seating', 'url' => '#', 'links' => [['title' => 'Sofas', 'url' => '#'], ['title' => 'Sectionals', 'url' => '#'], ['title' => 'Lounge Chairs', 'url' => '#']]],
+                    ['heading' => 'Tables', 'url' => '#', 'links' => [['title' => 'Coffee Tables', 'url' => '#'], ['title' => 'Side Tables', 'url' => '#']]],
+                ], 'promo_image' => '', 'promo_title' => '30% off modular sofas', 'promo_url' => '#'],
+                ['title' => 'Dining', 'url' => '#', 'badge' => '', 'columns' => [
+                    ['heading' => 'Dining', 'url' => '#', 'links' => [['title' => 'Dining Tables', 'url' => '#'], ['title' => 'Dining Chairs', 'url' => '#'], ['title' => 'Sideboards', 'url' => '#']]],
+                ]],
+                ['title' => 'Bedroom', 'url' => '#', 'badge' => '', 'columns' => []],
             ]]],
             ['type' => 'ajax_search',     'category' => 'site', 'label' => 'AJAX Live Search Bar',     'icon' => 'search',        'defaults' => ['placeholder' => 'Search sofas, oak dining tables, bouclé chairs, SKU...']],
             ['type' => 'shopping_cart',   'category' => 'site', 'label' => 'Shopping Cart Trigger',    'icon' => 'shopping-bag',  'defaults' => ['label' => 'Bag', 'count_tag' => '{{mb:cart_count}}']],

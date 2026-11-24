@@ -1,11 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { BreakpointMode, WidgetNode } from './types';
+import { normalizeItems, type MenuItem } from './megamenu';
 
 const props = defineProps<{
   widget: WidgetNode;
   viewport: BreakpointMode;
+  /** Store category tree, shown for MegaMenus whose source is "categories". */
+  categoryMenu?: MenuItem[];
 }>();
+
+const menuItems = computed<MenuItem[]>(() => {
+  if (props.widget.type !== 'nav_megamenu') return [];
+  if (props.widget.content.source === 'categories') {
+    return (props.categoryMenu || []).slice(0, Number(props.widget.content.max_items) || 8);
+  }
+  return normalizeItems(props.widget.content.items);
+});
 
 const SAMPLE_PRODUCTS = [
   {
@@ -154,30 +165,29 @@ function formatDynamicText(val: any, fallback = ''): string {
       </div>
     </div>
 
-    <!-- 2. MEGAMENU NAVIGATION BAR -->
-    <div
-      v-else-if="widget.type === 'nav_megamenu'"
-      style="display: grid; gap: 10px; background: #f8fafc; padding: 12px; border-radius: 10px; border: 1px solid #e2e8f0"
-      :style="{
-        gridTemplateColumns:
-          viewport === 'mobile'
-            ? '1fr'
-            : 'repeat(auto-fit, minmax(135px, 1fr))',
-      }"
-    >
-      <div
-        v-for="(item, idx) in (widget.content.items || []).slice(0, 5)"
-        :key="idx"
-        style="background: #ffffff; padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0"
-      >
-        <div style="font-weight: 800; font-size: 13px; color: #0f172a; display: flex; justify-content: space-between">
-          <span>{{ item.title }}</span>
-          <span style="color: #2563eb">▾</span>
-        </div>
-        <div style="font-size: 11px; color: #64748b; margin-top: 4px">
-          {{ item.answer || 'Sofas • Tables • Lounge Chairs' }}
-        </div>
+    <!-- 2. MEGAMENU NAVIGATION BAR (bar + the first item's panel, static) -->
+    <div v-else-if="widget.type === 'nav_megamenu'" class="mb-cv-mm">
+      <div v-if="menuItems.length === 0" class="mb-cv-mm-empty">
+        {{ widget.content.source === 'categories' ? 'No store categories to show yet.' : 'Add menu items in the inspector.' }}
       </div>
+      <template v-else>
+        <div v-if="viewport === 'mobile'" class="mb-cv-mm-burger">☰ {{ widget.content.menu_label || 'Menu' }}</div>
+        <ul class="mb-cv-mm-bar" :class="{ 'is-mobile': viewport === 'mobile' }">
+          <li v-for="(item, idx) in menuItems" :key="idx" :class="{ 'is-first': idx === 0 }">
+            <span>{{ item.title }}</span>
+            <span v-if="item.badge" class="mb-cv-mm-badge">{{ item.badge }}</span>
+            <span v-if="item.columns.length || item.promo_title" aria-hidden="true">▾</span>
+          </li>
+        </ul>
+        <div v-if="menuItems[0].columns.length || menuItems[0].promo_title" class="mb-cv-mm-panel">
+          <div v-for="(col, c) in menuItems[0].columns" :key="c">
+            <strong v-if="col.heading">{{ col.heading }}</strong>
+            <span v-for="(l, k) in col.links" :key="k">{{ l.title }}</span>
+          </div>
+          <div v-if="menuItems[0].promo_title" class="mb-cv-mm-promo">{{ menuItems[0].promo_title }}</div>
+        </div>
+        <div v-if="widget.content.source === 'categories'" class="mb-cv-mm-note">Live store categories</div>
+      </template>
     </div>
 
     <!-- 3. DYNAMIC PRODUCT GRID / PRODUCT CAROUSEL -->
@@ -510,3 +520,81 @@ function formatDynamicText(val: any, fallback = ''): string {
     </div>
   </div>
 </template>
+
+<style scoped>
+.mb-cv-mm {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  font-size: 13px;
+}
+.mb-cv-mm-empty,
+.mb-cv-mm-note {
+  color: #64748b;
+  font-size: 11.5px;
+}
+.mb-cv-mm-burger {
+  justify-self: start;
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  font-weight: 800;
+}
+.mb-cv-mm-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-weight: 800;
+  color: #0f172a;
+}
+.mb-cv-mm-bar.is-mobile {
+  flex-direction: column;
+}
+.mb-cv-mm-bar li {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+.mb-cv-mm-bar li.is-first {
+  color: #2563eb;
+}
+.mb-cv-mm-badge {
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #d97706;
+  color: #fff;
+  font-size: 9.5px;
+}
+.mb-cv-mm-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+.mb-cv-mm-panel > div {
+  display: grid;
+  gap: 3px;
+  color: #475569;
+  font-size: 12px;
+}
+.mb-cv-mm-panel strong {
+  color: #0f172a;
+}
+.mb-cv-mm-promo {
+  padding: 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  font-weight: 800;
+  color: #0f172a;
+}
+</style>
