@@ -11,7 +11,6 @@ services:
     image: mariadb:10.11
     environment:
       MARIADB_ROOT_PASSWORD: ${DB_PASSWD:-mb_test_root}
-      MARIADB_DATABASE: prestashop
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
@@ -32,8 +31,8 @@ services:
       DB_PASSWD: ${DB_PASSWD:-mb_test_root}
       DB_PREFIX: ps_
       PS_INSTALL_AUTO: "1"
-      # Fresh DB container every run (MARIADB_DATABASE). PS_ERASE_DB would drop it and the
-      # installer does not recreate it, so only ask the installer to create it if missing.
+      # The DB container starts empty every run and the installer creates the database
+      # (PS_INSTALL_DB). Do not also set MARIADB_DATABASE: the create step fails if it exists.
       PS_INSTALL_DB: "1"
       PS_DOMAIN: localhost:8080
       PS_ENABLE_SSL: "0"
