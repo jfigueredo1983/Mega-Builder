@@ -165,13 +165,15 @@ final class MediaManagerService
         $baseName = trim($baseName, '-') ?: 'asset';
         $safeFilename = substr($baseName, 0, 60) . '.' . $ext;
 
-        // If SVG, run SvgSanitizer and reject if malformed
+        // If SVG, run SvgSanitizer and reject if malformed; otherwise the bytes must really be that image type.
         if ($ext === 'svg') {
             $cleanedSvg = SvgSanitizer::sanitizeSvg($rawBytes);
             if ($cleanedSvg === null) {
                 return ['ok' => false, 'message' => 'Malicious or malformed SVG XML rejected by SvgSanitizer.'];
             }
             $rawBytes = $cleanedSvg;
+        } elseif (!self::bytesMatchExtension($rawBytes, $ext)) {
+            return ['ok' => false, 'message' => 'File content does not match its .' . $ext . ' extension.'];
         }
 
         $cleanFolder = self::sanitizeFolderSlug($folder);
@@ -179,6 +181,12 @@ final class MediaManagerService
         if (!is_dir($targetDir)) {
             @mkdir($targetDir, 0755, true);
             self::writeIndexGuard($targetDir);
+        }
+
+        // Never overwrite an existing asset silently: add -1, -2, ... to the name.
+        $stem = substr($baseName, 0, 60);
+        for ($n = 1; is_file($targetDir . '/' . $safeFilename) && $n < 1000; $n++) {
+            $safeFilename = $stem . '-' . $n . '.' . $ext;
         }
 
         $destPath = $targetDir . '/' . $safeFilename;
@@ -206,15 +214,45 @@ final class MediaManagerService
      */
     public static function deleteMedia(string $relPath): bool
     {
-        $relPath = trim(str_replace(['\\', '..'], ['/', ''], $relPath), '/ ');
-        if ($relPath === '' || str_ends_with($relPath, 'index.php')) {
+        $relPath = trim(str_replace('\\', '/', $relPath), '/ ');
+        $ext = strtolower(pathinfo($relPath, PATHINFO_EXTENSION));
+        if ($relPath === '' || !in_array($ext, self::ALLOWED_EXTENSIONS, true)) {
             return false;
         }
-        $fullPath = self::getBaseUploadDir() . '/' . $relPath;
-        if (is_file($fullPath)) {
-            return @unlink($fullPath);
+        $baseReal = realpath(self::getBaseUploadDir());
+        $fileReal = realpath(self::getBaseUploadDir() . '/' . $relPath);
+        // The resolved file must sit inside the uploads folder (blocks ../ and symlink escapes).
+        if ($baseReal === false || $fileReal === false || !str_starts_with($fileReal, $baseReal . DIRECTORY_SEPARATOR) || !is_file($fileReal)) {
+            return false;
         }
-        return false;
+        return @unlink($fileReal);
+    }
+
+    /**
+     * Check that raster bytes are really the image type their extension claims.
+     */
+    public static function bytesMatchExtension(string $bytes, string $ext): bool
+    {
+        $expected = [
+            'jpg'  => ['image/jpeg'],
+            'jpeg' => ['image/jpeg'],
+            'png'  => ['image/png'],
+            'gif'  => ['image/gif'],
+            'webp' => ['image/webp'],
+            'avif' => ['image/avif'],
+        ];
+        if (!isset($expected[$ext])) {
+            return false;
+        }
+        $mime = '';
+        if (class_exists('finfo')) {
+            $mime = (string) (new \finfo(FILEINFO_MIME_TYPE))->buffer($bytes);
+        }
+        if ($mime === '' || $mime === 'application/octet-stream') {
+            $info = @getimagesizefromstring($bytes);
+            $mime = is_array($info) ? (string) ($info['mime'] ?? '') : '';
+        }
+        return in_array($mime, $expected[$ext], true);
     }
 
     public static function writeIndexGuard(string $dir): void

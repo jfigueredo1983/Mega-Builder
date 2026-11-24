@@ -12,6 +12,7 @@ require_once dirname(__DIR__, 2) . '/src/Autoloader.php';
 use MegaBuilder\Compiler\WidgetRegistry;
 use MegaBuilder\Repository\TemplateRepository;
 use MegaBuilder\Security\HtmlSanitizer;
+use MegaBuilder\Security\PreviewToken;
 use MegaBuilder\Service\MediaManagerService;
 use MegaBuilder\Validator\PayloadValidator;
 
@@ -24,22 +25,57 @@ class AdminMegaBuilderController extends ModuleAdminController
     }
 
     /**
-     * Generate a cryptographic CSRF token bound to the current employee and shop secret.
+     * API action => PrestaShop profile permission required (view / add / edit / delete).
+     * Any action not listed here is rejected.
+     */
+    private const ACTION_PERMISSIONS = [
+        'listTemplates'      => 'view',
+        'getTemplate'        => 'view',
+        'previewTemplate'    => 'view',
+        'getPreviewLink'     => 'view',
+        'listBlueprints'     => 'view',
+        'getGlobalSettings'  => 'view',
+        'listMedia'          => 'view',
+        'exportTemplates'    => 'view',
+        'saveTemplate'       => 'edit', // upgraded to 'add' below when creating
+        'toggleTemplateStatus' => 'edit',
+        'restoreRevision'    => 'edit',
+        'saveGlobalSettings' => 'edit',
+        'saveStudioTheme'    => 'edit',
+        'duplicateTemplate'  => 'add',
+        'importTemplates'    => 'add',
+        'uploadMedia'        => 'add',
+        'createMediaFolder'  => 'add',
+        'deleteTemplate'     => 'delete',
+        'deleteMedia'        => 'delete',
+    ];
+
+    /**
+     * CSRF token bound to this employee and their password hash, signed with the install secret.
+     * Stable across the session (no midnight rotation); invalidated when the password changes.
+     * Returns '' if no install secret exists, which makes every API call fail closed.
      */
     public function getCsrfToken(): string
     {
-        $empId = (int) ($this->context->employee->id ?? 0);
-        $secret = defined('_COOKIE_KEY_') ? _COOKIE_KEY_ : 'megabuilder_secret_key';
-        return hash_hmac('sha256', 'mb_csrf_' . $empId . '_' . date('Y-m-d'), $secret);
+        $secret = PreviewToken::serverSecret();
+        $employee = $this->context->employee ?? null;
+        $empId = (int) ($employee->id ?? 0);
+        if ($secret === '' || $empId <= 0) {
+            return '';
+        }
+        $passwdHash = (string) ($employee->passwd ?? '');
+        return hash_hmac('sha256', 'mb_csrf|' . $empId . '|' . $passwdHash, $secret);
     }
 
     /**
-     * Generate a short-lived HMAC-SHA256 signed storefront preview token.
+     * Check the current employee's profile permission for this controller's tab.
      */
-    public static function getPreviewSignature(int $idTemplate = 0): string
+    private function hasPermission(string $level): bool
     {
-        $secret = defined('_COOKIE_KEY_') ? _COOKIE_KEY_ : 'megabuilder_secret_key';
-        return hash_hmac('sha256', 'mb_preview_' . $idTemplate . '_' . date('Y-m-d'), $secret);
+        if (!method_exists($this, 'access')) {
+            return true; // Very old core without per-tab access API.
+        }
+        return (bool) $this->access($level);
     }
 
     public function initContent(): void
@@ -61,9 +97,8 @@ class AdminMegaBuilderController extends ModuleAdminController
         }
 
         $ajaxBaseUrl = $this->context->link->getAdminLink('AdminMegaBuilder', true);
-        $previewBaseUrl = $this->context->link->getModuleLink('megabuilder', 'preview', [
-            'mb_sig' => self::getPreviewSignature(0),
-        ]);
+        // Unsigned base URL; per-template signed links come from the getPreviewLink action.
+        $previewBaseUrl = $this->context->link->getModuleLink('megabuilder', 'preview');
 
         $bootPayload = [
             'version'         => '1.0.0',
@@ -158,33 +193,32 @@ class AdminMegaBuilderController extends ModuleAdminController
         $action = (string) ($body['action'] ?? \Tools::getValue('mb_action', \Tools::getValue('action', '')));
         $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
-        $mutatingActions = [
-            'saveTemplate',
-            'toggleTemplateStatus',
-            'duplicateTemplate',
-            'deleteTemplate',
-            'restoreRevision',
-            'saveGlobalSettings',
-            'saveStudioTheme',
-            'uploadMedia',
-            'deleteMedia',
-            'createMediaFolder',
-            'importTemplates',
-            'seedAllBlueprints',
-        ];
+        if (!isset(self::ACTION_PERMISSIONS[$action])) {
+            $this->sendJson(400, false, 'UNKNOWN_ACTION', 'Unknown API action.');
+            return;
+        }
 
-        // Shield 1: Strict CSRF check on every mutating action or POST request (except read-only previewTemplate if token present)
-        if (in_array($action, $mutatingActions, true) || ($method === 'POST' && $action !== '')) {
-            $sentCsrf = (string) ($_SERVER['HTTP_X_MB_CSRF_TOKEN'] ?? ($body['csrf_token'] ?? \Tools::getValue('csrf_token', '')));
-            if ($sentCsrf === '' || !hash_equals($this->getCsrfToken(), $sentCsrf)) {
-                $this->sendJson(403, false, 'CSRF_INVALID', 'Invalid or missing X-MB-CSRF-Token security header.');
-                return;
-            }
+        // Shield 1: every API call must be a POST carrying the CSRF header (the studio always sends both).
+        $expectedCsrf = $this->getCsrfToken();
+        $sentCsrf = (string) ($_SERVER['HTTP_X_MB_CSRF_TOKEN'] ?? '');
+        if ($method !== 'POST' || $expectedCsrf === '' || $sentCsrf === '' || !hash_equals($expectedCsrf, $sentCsrf)) {
+            $this->sendJson(403, false, 'CSRF_INVALID', 'Invalid or missing X-MB-CSRF-Token security header.');
+            return;
+        }
+
+        // Role-based access: map the action to the employee profile's view/add/edit/delete rights.
+        $required = self::ACTION_PERMISSIONS[$action];
+        if ($action === 'saveTemplate' && (int) ($body['id_template'] ?? 0) <= 0) {
+            $required = 'add';
+        }
+        if (!$this->hasPermission($required)) {
+            $this->sendJson(403, false, 'PERMISSION_DENIED', "Your employee profile lacks '{$required}' permission for Mega Builder.");
+            return;
         }
 
         $idLang = (int) ($this->context->language->id ?? 1);
         $idShop = (int) ($this->context->shop->id ?? 1);
-        $idEmployee = (int) ($this->context->employee->id ?? 1);
+        $idEmployee = (int) ($this->context->employee->id ?? 0);
 
         switch ($action) {
             case 'listTemplates':
@@ -262,8 +296,28 @@ class AdminMegaBuilderController extends ModuleAdminController
 
             case 'previewTemplate':
                 $rawLayout = is_array($body['layout'] ?? null) ? $body['layout'] : [];
-                $rendered = TemplateRepository::renderLiveLayout($rawLayout);
+                $rendered = TemplateRepository::renderLiveLayout($rawLayout, $idLang);
                 $this->sendJson(200, true, 'PREVIEW_RENDERED', 'Live storefront preview compiled.', $rendered);
+                return;
+
+            case 'getPreviewLink':
+                $idTpl = (int) ($body['id_template'] ?? 0);
+                if (!TemplateRepository::getTemplate($idTpl, $idLang)) {
+                    $this->sendJson(404, false, 'NOT_FOUND', 'Template not found.');
+                    return;
+                }
+                $token = PreviewToken::create($idTpl);
+                if ($token === '') {
+                    $this->sendJson(500, false, 'NO_SECRET', 'Server secret unavailable; cannot sign preview link.');
+                    return;
+                }
+                $this->sendJson(200, true, 'PREVIEW_LINK', 'Signed preview link valid for 15 minutes.', [
+                    'url'        => $this->context->link->getModuleLink('megabuilder', 'preview', [
+                        'id_template' => $idTpl,
+                        'mb_token'    => $token,
+                    ]),
+                    'expires_in' => PreviewToken::DEFAULT_TTL_SECONDS,
+                ]);
                 return;
 
             case 'listBlueprints':
