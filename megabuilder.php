@@ -45,7 +45,7 @@ class MegaBuilder extends Module
     {
         $this->name = 'megabuilder';
         $this->tab = 'front_office_features';
-        $this->version = '1.0.0';
+        $this->version = '1.1.0';
         $this->author = 'Mega Builder Studio';
         $this->need_instance = 0;
         $this->bootstrap = true;

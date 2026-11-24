@@ -452,6 +452,30 @@ function formatDynamicText(val: any, fallback = ''): string {
       </span>
     </div>
 
+    <!-- DIVIDER -->
+    <hr
+      v-else-if="widget.type === 'divider'"
+      class="mb-divider"
+      :style="{
+        border: 0,
+        borderTop: `${Math.min(20, Math.max(1, Number(widget.content.thickness) || 1))}px ${
+          ['solid', 'dashed', 'dotted', 'double'].includes(widget.content.style_type) ? widget.content.style_type : 'solid'
+        } ${widget.style.accent_color || 'currentColor'}`,
+        margin: 0,
+      }"
+    />
+
+    <!-- SPACER -->
+    <div
+      v-else-if="widget.type === 'spacer'"
+      class="mb-spacer"
+      aria-hidden="true"
+      :style="{
+        height: `${Math.min(400, Math.max(0, Number(widget.content.height_px ?? 32)))}px`,
+        background: 'repeating-linear-gradient(45deg, transparent 0 6px, rgba(148,163,184,0.15) 6px 12px)',
+      }"
+    ></div>
+
     <!-- 10. HEADING / LOGO / PRICE / RATING / GENERIC -->
     <div v-else>
       <span

@@ -11,6 +11,7 @@ const {
   filteredDashboardTemplates,
   subStudioTemplates,
   allSubComponents,
+  comingSoonTypes,
   filteredWidgets,
   selectedSection,
   selectedWidget,
@@ -976,14 +977,19 @@ function countTemplatesForSection(secKey: string): number {
                 :key="w.type"
                 type="button"
                 class="mb-widget-chip"
-                draggable="true"
+                :class="{ 'is-coming-soon': comingSoonTypes.has(w.type) }"
+                :draggable="!comingSoonTypes.has(w.type)"
+                :disabled="comingSoonTypes.has(w.type)"
+                :title="comingSoonTypes.has(w.type) ? 'Coming soon: not available on the storefront yet' : undefined"
+                :data-widget-type="w.type"
                 @dragstart="handleDragStart(w.type, w.label)"
                 @dragend="handleDragEnd"
                 @click="store.insertWidget(w.type)"
               >
                 <span class="mb-widget-emoji">{{ WIDGET_EMOJIS[w.category] || '📦' }}</span>
-                <span>{{ w.label }}</span>
-                <span class="mb-widget-cat-tag">+ Drag or Click</span>
+                <span class="mb-widget-label">{{ w.label }}</span>
+                <span v-if="comingSoonTypes.has(w.type)" class="mb-widget-cat-tag mb-coming-soon-tag">Coming soon</span>
+                <span v-else class="mb-widget-cat-tag">+ Drag or Click</span>
               </button>
             </div>
           </div>
@@ -1254,6 +1260,14 @@ function countTemplatesForSection(secKey: string): number {
                           ✕
                         </button>
                       </div>
+                    </div>
+
+                    <div
+                      v-if="comingSoonTypes.has(w.type)"
+                      class="mb-coming-soon-note"
+                      role="note"
+                    >
+                      Coming soon: this block is not shown on your storefront yet.
                     </div>
 
                     <!-- Real WYSIWYG Visual Preview of the Widget -->

@@ -130,6 +130,8 @@ export interface WidgetDefinition {
   label: string;
   icon: string;
   defaults: Record<string, any>;
+  /** 'coming_soon' widgets have no storefront renderer yet and cannot be added. */
+  status?: 'ready' | 'coming_soon';
 }
 
 export interface GlobalSettings {

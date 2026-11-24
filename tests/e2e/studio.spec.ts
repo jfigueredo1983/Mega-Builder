@@ -43,6 +43,22 @@ test.describe.serial('Mega Builder studio → storefront', () => {
     expect(Object.keys(boot.pageSections)).toHaveLength(15);
   });
 
+  test('coming-soon widgets are visible in the palette but cannot be used', async ({ page }) => {
+    await openStudio(page);
+    const comingSoon = await page.evaluate(
+      () => (window as any).__MEGABUILDER_BOOT__.widgets.filter((w: any) => w.status === 'coming_soon').length,
+    );
+    expect(comingSoon).toBe(32);
+
+    await page.getByRole('button', { name: /Live Visual Canvas/ }).click();
+    const disabledChips = page.locator('.mb-widget-chip.is-coming-soon');
+    await expect(disabledChips).toHaveCount(comingSoon);
+    await expect(disabledChips.first()).toBeDisabled();
+    await expect(disabledChips.first()).toContainText('Coming soon');
+    await expect(page.locator('.mb-widget-chip[data-widget-type="breadcrumb"]')).toBeDisabled();
+    await expect(page.locator('.mb-widget-chip[data-widget-type="divider"]')).toBeEnabled();
+  });
+
   test('drag a heading onto the canvas, edit it and publish', async ({ page }) => {
     await openStudio(page);
     await page.getByRole('button', { name: /Live Visual Canvas/ }).click();
