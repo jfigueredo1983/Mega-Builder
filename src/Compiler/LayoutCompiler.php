@@ -15,6 +15,39 @@ use MegaBuilder\Validator\PayloadValidator;
 final class LayoutCompiler
 {
     /**
+     * Widget types with a real storefront renderer below. Any other registered type is
+     * "coming soon": the studio shows it as unavailable and the storefront renders nothing
+     * for it, instead of a placeholder block. Keep in sync with renderWidgetInnerHtml().
+     */
+    public const RENDERED_TYPES = [
+        'heading', 'animated_headline', 'page_title', 'product_title', 'shop_title',
+        'shop_logo',
+        'text_editor', 'custom_html', 'product_description',
+        'image', 'product_images',
+        'button', 'add_to_cart', 'lightbox_trigger',
+        'creative_slider', 'image_carousel', 'testimonial_carousel',
+        'accordion', 'toggle', 'tabs',
+        'nav_megamenu',
+        'product_grid', 'product_carousel',
+        'category_grid', 'articles_grid', 'trust_badges', 'account_nav_links',
+        'product_box', 'image_box', 'icon_box', 'call_to_action', 'flip_box',
+        'image_hotspot',
+        'ajax_search',
+        'email_subscription', 'contact_form', 'customer_login', 'customer_register', 'password_recovery',
+        'product_price',
+        'countdown',
+        'ps_module_widget',
+        'template_widget',
+        'divider',
+        'spacer',
+    ];
+
+    public static function isRendered(string $type): bool
+    {
+        return in_array($type, self::RENDERED_TYPES, true);
+    }
+
+    /**
      * Compile a sanitized layout tree into ready-to-serve HTML and responsive CSS.
      *
      * @param array<string, mixed> $layout
@@ -205,6 +238,11 @@ CSS;
     {
         $wId = HtmlSanitizer::escapeOutput((string) $w['id']);
         $type = (string) ($w['type'] ?? 'heading');
+
+        // Coming-soon widgets have no storefront renderer yet: output nothing rather than a dummy block.
+        if (!self::isRendered($type)) {
+            return ['html' => '', 'css_desktop' => '', 'css_tablet' => '', 'css_mobile' => ''];
+        }
         $c = is_array($w['content'] ?? null) ? $w['content'] : [];
         $s = is_array($w['style'] ?? null) ? $w['style'] : [];
         $adv = is_array($w['advanced'] ?? null) ? $w['advanced'] : [];
@@ -509,6 +547,15 @@ CSS;
                 $mod = $e($c['module_name'] ?? 'ps_featuredproducts');
                 $hk = $e($c['hook_name'] ?? 'displayHome');
                 return '<div class="mb-native-module-embed">[mb_module name="' . $mod . '" hook="' . $hk . '"]</div>';
+
+            case 'divider':
+                $style = in_array($c['style_type'] ?? 'solid', ['solid', 'dashed', 'dotted', 'double'], true) ? (string) $c['style_type'] : 'solid';
+                $thickness = PayloadValidator::clampInt($c['thickness'] ?? 1, 1, 20, 1);
+                return '<hr class="mb-divider" style="border:0;border-top:' . $thickness . 'px ' . $style . ' var(--mb-w-accent, currentColor);margin:0;" />';
+
+            case 'spacer':
+                $height = PayloadValidator::clampInt($c['height_px'] ?? 32, 0, 400, 32);
+                return '<div class="mb-spacer" style="height:' . $height . 'px" aria-hidden="true"></div>';
 
             case 'template_widget':
                 $tplId = PayloadValidator::clampInt($c['template_id'] ?? 0, 0, 999999, 0);

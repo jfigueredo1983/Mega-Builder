@@ -11,11 +11,23 @@ namespace MegaBuilder\Compiler;
 final class WidgetRegistry
 {
     /**
-     * Return all 77 widgets organized across the 7 Creative Elements categories.
+     * Return all 77 widgets organized across the 7 Creative Elements categories, each tagged with
+     * 'status': 'ready' when it has a storefront renderer, 'coming_soon' when it does not yet.
      *
      * @return array<int, array<string, mixed>>
      */
     public static function getAllWidgets(): array
+    {
+        return array_map(
+            static fn(array $w): array => $w + ['status' => LayoutCompiler::isRendered((string) $w['type']) ? 'ready' : 'coming_soon'],
+            self::widgetDefinitions()
+        );
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private static function widgetDefinitions(): array
     {
         return [
             // =====================================================================

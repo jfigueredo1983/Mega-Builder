@@ -39,6 +39,7 @@ export function makeLayout(): LayoutTree {
 const widgets: WidgetDefinition[] = [
   { type: 'heading', category: 'basic', label: 'Heading', icon: 'type', defaults: { text: 'Hello', subtitle: 'EYEBROW' } },
   { type: 'button', category: 'basic', label: 'Button CTA', icon: 'mouse-pointer', defaults: { text: 'Shop', url: '#catalog' } },
+  { type: 'breadcrumb', category: 'site', label: 'Breadcrumb', icon: 'route', defaults: {}, status: 'coming_soon' },
   { type: 'template_widget', category: 'premium', label: 'Template', icon: 'box', defaults: {} },
 ] as unknown as WidgetDefinition[];
 

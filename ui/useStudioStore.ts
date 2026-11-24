@@ -201,9 +201,13 @@ export function createStudioStore(boot: BootPayload) {
     return state.boot.templates.filter((t) => t.entity_kind === 'sub_component');
   });
 
+  const comingSoonTypes = computed(
+    () => new Set(state.boot.widgets.filter((w) => w.status === 'coming_soon').map((w) => w.type))
+  );
+
   const filteredWidgets = computed(() => {
     const q = state.widgetSearch.trim().toLowerCase();
-    return state.boot.widgets.filter((w) => {
+    const matches = state.boot.widgets.filter((w) => {
       if (
         state.widgetCategoryFilter !== 'all' &&
         w.category !== state.widgetCategoryFilter
@@ -219,6 +223,11 @@ export function createStudioStore(boot: BootPayload) {
       }
       return true;
     });
+    // Ready widgets first, coming-soon ones after them (stable within each group).
+    return [
+      ...matches.filter((w) => !comingSoonTypes.value.has(w.type)),
+      ...matches.filter((w) => comingSoonTypes.value.has(w.type)),
+    ];
   });
 
   const selectedSection = computed<SectionNode | null>(() => {
@@ -624,6 +633,10 @@ export function createStudioStore(boot: BootPayload) {
       state.boot.widgets.find((w) => w.type === widgetType) ||
       state.boot.widgets[0];
     if (!def) return;
+    if (def.status === 'coming_soon') {
+      notify(`"${def.label}" is coming soon and can't be added yet.`, 'info');
+      return;
+    }
 
     if (state.currentTemplate.layout.sections.length === 0) {
       addSection(1);
@@ -896,6 +909,7 @@ export function createStudioStore(boot: BootPayload) {
     filteredDashboardTemplates,
     subStudioTemplates,
     allSubComponents,
+    comingSoonTypes,
     filteredWidgets,
     selectedSection,
     selectedWidget,

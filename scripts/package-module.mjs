@@ -20,6 +20,7 @@ const INCLUDE_ITEMS = [
   'index.php',
   'controllers',
   'sql',
+  'upgrade',
   'src',
   'views',
 ];

@@ -101,7 +101,7 @@ class AdminMegaBuilderController extends ModuleAdminController
         $previewBaseUrl = $this->context->link->getModuleLink('megabuilder', 'preview');
 
         $bootPayload = [
-            'version'         => '1.0.0',
+            'version'         => (string) ($this->module->version ?? '1.1.0'),
             'psVersion'       => defined('_PS_VERSION_') ? _PS_VERSION_ : '9.2.0',
             'shopName'        => (string) ($this->context->shop->name ?? 'DoIt Furniture'),
             'storefrontUrl'   => $this->context->shop->getBaseURL(true),

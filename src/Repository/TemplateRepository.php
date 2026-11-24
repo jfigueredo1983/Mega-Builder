@@ -346,6 +346,42 @@ final class TemplateRepository
     }
 
     /**
+     * Recompile the stored HTML/CSS of every template in every language from its layout_json.
+     * Storefront output is compiled at save time, so this is needed whenever the compiler changes
+     * (run from module upgrade scripts). Returns the number of language rows recompiled.
+     */
+    public static function recompileAll(): int
+    {
+        if (!class_exists('Db')) {
+            return 0;
+        }
+        $db = \Db::getInstance();
+        $prefix = defined('_DB_PREFIX_') ? _DB_PREFIX_ : 'ps_';
+        $rows = $db->executeS("SELECT id_template, id_lang, layout_json FROM `{$prefix}mb_template_lang`");
+        if (!is_array($rows)) {
+            return 0;
+        }
+
+        $global = self::getGlobalSettings();
+        $count = 0;
+        foreach ($rows as $r) {
+            $layout = json_decode((string) $r['layout_json'], true);
+            if (!is_array($layout)) {
+                continue;
+            }
+            $compiled = LayoutCompiler::compile($layout, $global);
+            $db->execute(
+                "UPDATE `{$prefix}mb_template_lang`
+                 SET compiled_html = '" . pSQL($compiled['html'], true) . "',
+                     compiled_css = '" . pSQL($compiled['css'], true) . "'
+                 WHERE id_template = " . (int) $r['id_template'] . " AND id_lang = " . (int) $r['id_lang']
+            );
+            $count++;
+        }
+        return $count;
+    }
+
+    /**
      * Toggle template active status (0 = Draft, 1 = Published).
      */
     public static function toggleStatus(int $idTemplate, int $active, int $idShop = 1): bool

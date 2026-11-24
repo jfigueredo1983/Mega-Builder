@@ -114,6 +114,20 @@ describe('studio canvas editing', () => {
     expect(store.state.currentTemplate.layout.sections[0].columns).toHaveLength(6);
   });
 
+  it('refuses to insert a coming-soon widget and says why', () => {
+    store.insertWidget('breadcrumb');
+    expect(widgetsIn(store)).toHaveLength(0);
+    expect(store.state.undoStack).toHaveLength(0);
+    expect(store.state.toastMessage).toContain('coming soon');
+  });
+
+  it('lists ready widgets before coming-soon ones', () => {
+    const types = store.filteredWidgets.value.map((w) => w.type);
+    expect(types[types.length - 1]).toBe('breadcrumb');
+    expect(store.comingSoonTypes.value.has('breadcrumb')).toBe(true);
+    expect(store.comingSoonTypes.value.has('heading')).toBe(false);
+  });
+
   it('inserts a saved template as a linked shortcode widget', () => {
     store.insertSavedTemplateIntoCanvas({ id_template: 12, section_type: 'slider', title: 'Hero slider' } as never, 'shortcode');
     const [w] = widgetsIn(store);
