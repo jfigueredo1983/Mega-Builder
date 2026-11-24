@@ -1,0 +1,22 @@
+{
+  "name": "megabuilder-prestashop-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mega Builder — Visual Drag-and-Drop Page & Theme Studio for PrestaShop 8.0 to 9.2+",
+  "type": "module",
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit",
+    "build": "vite build && node scripts/postbuild-guards.mjs",
+    "test": "node scripts/run-tests.mjs",
+    "package": "npm run typecheck && npm run build && node scripts/package-module.mjs"
+  },
+  "dependencies": {
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "vue-tsc": "^2.2.0"
+  }
+}

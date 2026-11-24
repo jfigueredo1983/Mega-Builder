@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<module>
+    <name>megabuilder</name>
+    <displayName><![CDATA[Mega Builder — Visual Drag & Drop Page & Theme Studio]]></displayName>
+    <version><![CDATA[1.0.0]]></version>
+    <description><![CDATA[Full-site drag-and-drop visual page builder for PrestaShop 8.0 to 9.2+ with 77 widgets, 15 page template sections, 4 component sub-studios, and imperative 3-viewport responsiveness.]]></description>
+    <author><![CDATA[Mega Builder Studio]]></author>
+    <tab><![CDATA[front_office_features]]></tab>
+    <is_configurable>1</is_configurable>
+    <need_instance>0</need_instance>
+</module>

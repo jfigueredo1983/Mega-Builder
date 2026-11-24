@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Local Secrets & QA Targets (NEVER COMMIT)
+.agents/*.local.json
+.env
+.env.*
+*.pem
+*.key
+
+# Build & Package Artifacts
+dist/*.zip
+.vite/
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
